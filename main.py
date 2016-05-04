@@ -31,7 +31,7 @@ while True:
 
 # Split by and keep any non-alphanumeric delimiter, filter blanks
 def split_formula(f):
-    split = list(filter(None, re.split('([^\\w.":!$<>%&/^+-*])', f)))
+    split = list(filter(None, re.split('([^\\w.":!$<>%&/\s])', f)))
     return split
     
 dl_formula = split_formula(formula)
@@ -54,7 +54,7 @@ find_functions(dl_formula, functions)
 # variables: any non-alpha-numeric char, with exceptions
 # separators: any non-alpha-numeric char
 # tbd: take another look at these and figure out wtf is actually going on here
-variables = re.compile('([\w\.":!$<>%&/^+-*]+)',re.I)
+variables = re.compile('([\w\.":!$<>%&/\s]+)',re.I)
 separators = re.compile(r'^\W+',re.I)
 
 #tbd: add operators:
@@ -131,7 +131,7 @@ for serp in search.serps:
 ranking = collections.defaultdict(dict)
 
 # Web elements to look for
-elements = ['pre', 'p', 'ul', 'td']
+elements = ['pre', 'p', 'ul', 'td', 'h1', 'h2', 'h3', 'h4']
 
 # Searches a web page for an element, stores matches in dict
 def find_elements(element):
@@ -139,7 +139,7 @@ def find_elements(element):
             if(all(x in p.getText() for x in found_functions)):
                 matches[element] += 1
 
-web_id = 0 
+web_id = 0
 
 for url in urls:
     web_id += 1 # Gives an id to each web hit
@@ -230,30 +230,35 @@ def get_data(url):
                         nf_dl_type['sep'].append(f)
                     else:
                         nf_dl_type['var'].append(f)                
-                
-                excerpt = (p.findPrevious('p').findPrevious('p').findPrevious('p').findPrevious('p').getText())
+
+                excerpt = (p.findPrevious(elements).findPrevious(elements).findPrevious(elements).findPrevious(elements).getText())
                 excerpt += ("\n\n")
-                excerpt += (p.findPrevious('p').findPrevious('p').findPrevious('p').getText())
+                excerpt += (p.findPrevious(elements).findPrevious(elements).findPrevious(elements).getText())
                 excerpt += ("\n\n")
-                excerpt += (p.findPrevious('p').findPrevious('p').getText())
+                excerpt += (p.findPrevious(elements).findPrevious(elements).getText())
                 excerpt += ("\n\n")                
-                excerpt += (p.findPrevious('p').getText())
+                excerpt += (p.findPrevious(elements).getText())
                 excerpt += ("\n\n")
                 excerpt += (p.getText())
                 excerpt += ("\n\n")
-                excerpt += (p.findNext('p').getText())
+                excerpt += (p.findNext(elements).getText())
                 excerpt += ("\n\n")
-                excerpt += (p.findNext('p').findNext('p').getText())
+                excerpt += (p.findNext(elements).findNext(elements).getText())
                 excerpt += ("\n\n")
-                excerpt += (p.findNext('p').findNext('p').findNext('p').getText())
+                excerpt += (p.findNext(elements).findNext(elements).findNext(elements).getText())
                 excerpt += ("\n\n")
-                excerpt += (p.findNext('p').findNext('p').findNext('p').findNext('p').getText())
+                excerpt += (p.findNext(elements).findNext(elements).findNext(elements).findNext(elements).getText())
                 excerpt += ("\n\n")
-                excerpt += (p.findNext('p').findNext('p').findNext('p').findNext('p').findNext('p').getText())
+                excerpt += (p.findNext(elements).findNext(elements).findNext(elements).findNext(elements).findNext(elements).getText())
                 excerpt += ("\n\n")
-                excerpt += (p.findNext('p').findNext('p').findNext('p').findNext('p').findNext('p').findNext('p').getText())
+                excerpt += (p.findNext(elements).findNext(elements).findNext(elements).findNext(elements).findNext(elements).findNext(elements).getText())
+            
 
-                var_dict = {}          
+
+                var_dict = {}  
+                
+                print(dl_type)
+                print(nf_dl_type)
                 
                 for i,v in enumerate(nf_dl_type['var']):
                     var_dict[v] = dl_type['var'][i]
