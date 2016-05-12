@@ -11,6 +11,7 @@ import requests
 from bs4 import BeautifulSoup
 from GoogleScraper import scrape_with_config, GoogleSearchError
 import collections
+import time
 
 tries = 0
 # Input Excel formula
@@ -28,6 +29,8 @@ while True:
     else:
         break
 #formula = '=INDEX(A1:Z10,MATCH("product",A1:A10,0),MATCH("month",A1:Z1,0))'
+
+startTime = time.time()
 
 # Split by and keep any non-alphanumeric delimiter, filter blanks
 def split_formula(f):
@@ -97,10 +100,10 @@ print('\nSearching for substituted formula:\n%s' % wcf)
 
 config = {
     'use_own_ip': 'True',
-    'keyword': ('excel formula -youtube -stackoverflow -"stack exchange" %s') % wcf,
+    'keyword': ('excel formula -youtube -stackoverflow -"stack exchange" -site:knowexcel.com %s') % wcf,
     'search_engines': ['duckduckgo'],
     'num_pages_for_keyword': 1,
-    'scrape_method': 'http',
+    'scrape_method': 'http-async',
     'do_caching': 'True',
     'print_results': 'summarize'
 }
@@ -115,7 +118,7 @@ except GoogleSearchError as e:
     pass
 
 # Manually set max urls generated, since the built-in function is a bit wonky
-max_results = 6
+max_results = 25
 r = 0
 # Results - append URL for each hit to urls list
 for serp in search.serps:
@@ -133,6 +136,7 @@ ranking = collections.defaultdict(dict)
 # Web elements to look for
 elements = ['pre', 'p', 'ul', 'td', 'h1', 'h2', 'h3', 'h4']
 
+
 # Searches a web page for an element, stores matches in dict
 def find_elements(element):
         for p in (soup.find_all(element)):
@@ -144,29 +148,31 @@ web_id = 0
 for url in urls:
     web_id += 1 # Gives an id to each web hit
     matches = collections.defaultdict(int) # New dict for each url
-
-    r = requests.get(url)
-    soup = BeautifulSoup(r.content, "html.parser") # Parses the page
-
-    # Iterate through each chosen element, which are counted
-    # using the find_elements function
-    for e in elements:
-        find_elements(e)
-   
     try:
-        stitle = soup.title.string
-    except:
-        stitle = "No title"
- 
-    print('\nFound matches in "%s".\n \
-    URL: %s' % (stitle,url))
-
-    ##
+        r = requests.get(url)
+        soup = BeautifulSoup(r.content, "html.parser") # Parses the page
     
-    # Adds each element an its number of matches to ranking dict
-    # Also adds the URL for reference
-    ranking[web_id] = (matches)
-    ranking[web_id]['url'] = (url)
+        # Iterate through each chosen element, which are counted
+        # using the find_elements function
+        for e in elements:
+            find_elements(e)
+       
+        try:
+            stitle = soup.title.string
+        except:
+            stitle = "No title"
+     
+        print('\nFound matches in "%s".\n \
+        URL: %s' % (stitle,url))
+    
+        ##
+        
+        # Adds each element an its number of matches to ranking dict
+        # Also adds the URL for reference
+        ranking[web_id] = (matches)
+        ranking[web_id]['url'] = (url)
+    except:
+        continue
 
 
 # Sums total count of elements per web hit into a score
@@ -229,48 +235,47 @@ def get_data(url):
                     elif(not re.search(variables, f)):
                         nf_dl_type['sep'].append(f)
                     else:
-                        nf_dl_type['var'].append(f)                
-
-                excerpt = (p.findPrevious(elements).findPrevious(elements).findPrevious(elements).findPrevious(elements).getText())
-                excerpt += ("\n\n")
-                excerpt += (p.findPrevious(elements).findPrevious(elements).findPrevious(elements).getText())
-                excerpt += ("\n\n")
-                excerpt += (p.findPrevious(elements).findPrevious(elements).getText())
-                excerpt += ("\n\n")                
-                excerpt += (p.findPrevious(elements).getText())
-                excerpt += ("\n\n")
-                excerpt += (p.getText())
-                excerpt += ("\n\n")
-                excerpt += (p.findNext(elements).getText())
-                excerpt += ("\n\n")
-                excerpt += (p.findNext(elements).findNext(elements).getText())
-                excerpt += ("\n\n")
-                excerpt += (p.findNext(elements).findNext(elements).findNext(elements).getText())
-                excerpt += ("\n\n")
-                excerpt += (p.findNext(elements).findNext(elements).findNext(elements).findNext(elements).getText())
-                excerpt += ("\n\n")
-                excerpt += (p.findNext(elements).findNext(elements).findNext(elements).findNext(elements).findNext(elements).getText())
-                excerpt += ("\n\n")
-                excerpt += (p.findNext(elements).findNext(elements).findNext(elements).findNext(elements).findNext(elements).findNext(elements).getText())
-            
-
-
-                var_dict = {}  
+                        nf_dl_type['var'].append(f)
                 
-                print(dl_type)
-                print(nf_dl_type)
+                try:
+                    # Fetch the match +- 5 paragraphs
+                    excerpt = (p.findPrevious(elements).findPrevious(elements).findPrevious(elements).findPrevious(elements).getText())
+                    excerpt += ("\n\n")
+                    excerpt += (p.findPrevious(elements).findPrevious(elements).findPrevious(elements).getText())
+                    excerpt += ("\n\n")
+                    excerpt += (p.findPrevious(elements).findPrevious(elements).getText())
+                    excerpt += ("\n\n")                
+                    excerpt += (p.findPrevious(elements).getText())
+                    excerpt += ("\n\n")
+                    excerpt += (p.getText())
+                    excerpt += ("\n\n")
+                    excerpt += (p.findNext(elements).getText())
+                    excerpt += ("\n\n")
+                    excerpt += (p.findNext(elements).findNext(elements).getText())
+                    excerpt += ("\n\n")
+                    excerpt += (p.findNext(elements).findNext(elements).findNext(elements).getText())
+                    excerpt += ("\n\n")
+                    excerpt += (p.findNext(elements).findNext(elements).findNext(elements).findNext(elements).getText())
+                    excerpt += ("\n\n")
+                    excerpt += (p.findNext(elements).findNext(elements).findNext(elements).findNext(elements).findNext(elements).getText())
+                    excerpt += ("\n\n")
+                    excerpt += (p.findNext(elements).findNext(elements).findNext(elements).findNext(elements).findNext(elements).findNext(elements).getText())
                 
-                for i,v in enumerate(nf_dl_type['var']):
-                    var_dict[v] = dl_type['var'][i]
-                
-                xpattern = re.compile('|'.join(var_dict.keys()))                
-                result = xpattern.sub(lambda x: var_dict[x.group()], excerpt)
-                
-                print("Excerpt from %s\n" % top_hit_url)
-                print(result)
- 
-                return True                
-                break
+                    var_dict = {}  
+                    
+                    for i,v in enumerate(nf_dl_type['var']):
+                        var_dict[v] = dl_type['var'][i]
+                    
+                    xpattern = re.compile('|'.join(var_dict.keys()))                
+                    result = xpattern.sub(lambda x: var_dict[x.group()], excerpt)
+                    
+                    print("Excerpt from %s\n" % top_hit_url)
+                    print(result)
+     
+                    return True                
+                    break
+                except:
+                    pass
     global current_rank
     current_rank += 1
     return False
@@ -286,5 +291,10 @@ while(look_for_text) == False:
         print('\n')
         look_for_text = get_data(top_hit_url)
     else:
-        print("Unable to find feasible match in top 5 scrapes.")
+        print("Unable to find feasible match in top %s scrapes." % max_results)
         break
+
+
+endTime = time.time()
+duration = (endTime - startTime)
+print(duration)
