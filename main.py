@@ -14,8 +14,6 @@ import os
 from config_bot import *
 import sys
 
-
-
 sys.stdout = open("out.txt", "w")
 
 # Check that the file that contains our username exists
@@ -51,16 +49,14 @@ c_formula = ""
 for comment in subreddit_comments:
     if comment.id not in posts_replied_to:
         print("Comment not replied to: %s" % comment, comment.id)
-        if comment.body.startswith("!hejjagtestar"):
-            c_formula = comment.body.replace("!hejjagtestar", "")
+        if comment.body.startswith("!formulate"):
+            c_formula = comment.body.replace("!formulate", "")
             c_formula = ''.join(list(filter(None, c_formula))).strip()
             break
 
 if(len(c_formula) < 2):
     sys.exit("No comments found.")
     
-        
-
 ### All set, let's begin ###
 
 import requests
@@ -87,7 +83,6 @@ while True:
             break
     else:
         break
-formula = '=IF(COUNT.IF(J4:BQ4;">0")=60;"Graduted;""No graduated")'
 
 startTime = time.time()
 
@@ -97,7 +92,6 @@ def split_formula(f):
     return split
     
 dl_formula = split_formula(formula)
-
 
 # List of functions
 functions = []
@@ -205,7 +199,7 @@ for serp in search.serps:
             urls.append(link.link)
             r += 1
         
-#### Parse into BS4 ####
+#### Parse with BS4 ####
 
 # This dict will be used to store each hit with an id as key
 # and chosen web element, its URL, and a total score (sum of found elements)
@@ -252,7 +246,6 @@ for url in urls:
     except:
         continue # Skips sites with SSL cert errors
 
-
 # Sums total count of elements per web hit into a score
 # This score will used in decided which page is more likely
 # to contain useful data
@@ -287,6 +280,7 @@ def get_ranked_url(rank):
 
 nf = '' # new/scraped formula
 
+# This function 
 def getAttribute(attr, f, t):
     try:
         return getattr(attr, f)(t)
@@ -298,13 +292,13 @@ def getAttribute(attr, f, t):
 def get_data(url):
     r = requests.get(url)
     soup = BeautifulSoup(r.text.encode('utf-8'), "lxml") # Parses the page
-    for p in (soup.find_all()):
-        if(all(functions in p.getText() for functions in found_functions)):
-            nf_found_functions = []
+    for p in (soup.find_all()): # Iterate through every page element
+        if(all(functions in p.getText() for functions in found_functions)): # Check if current element contains function names
+            nf_found_functions = [] # Here we create a new function list for the current text
             global nf
             nf = p.getText()
-            nf_dl_formula = split_formula(nf.replace(' ', ''))
-            find_functions(nf_dl_formula, nf_found_functions)    
+            nf_dl_formula = split_formula(nf.replace(' ', '')) # Split the formula and get rid of whitespaces
+            find_functions(nf_dl_formula, nf_found_functions) # Add function names to list
 #            print(url)
 #            print(nf[0])
 #            print(len(found_functions))
@@ -313,6 +307,8 @@ def get_data(url):
 #            print(set(nf_found_functions))  
 #            print(nf.encode('utf-8'))   
             
+            # The next requirements are that the new function list and the original function list need to contain the same
+            # names, and be the same length. The text need to begin with an equal sign
             if(set(found_functions) == set(nf_found_functions)) and len(found_functions) == len(nf_found_functions) and nf[0] == "=":
                 
                 # Dictionary to keep track of which formula element is const, var, or sep
@@ -326,7 +322,6 @@ def get_data(url):
                         nf_dl_type['sep'].append(f)
                     else:
                         nf_dl_type['var'].append(f)
-
                 
                 num_p = 5 # Set number of paragraphs before and after p to collect
                 plist = [] # List to store paragraph +- num_p paragraphs
@@ -335,7 +330,7 @@ def get_data(url):
                 nexttext = p
                 
                 # Find previous and next num_p paragraphs, add to list
-                for i in range(0,5):
+                for i in range(0,num_p):
                     prevtext = getAttribute(prevtext, 'findPrevious', elements)
                     try:                    
                         plist.insert(0, prevtext.getText()).encode('utf-8')
@@ -345,7 +340,7 @@ def get_data(url):
                     plist.append(p.getText()).encode('utf-8')
                 except:
                     pass
-                for i in range(0,5):
+                for i in range(0,num_p):
                     nexttext = getAttribute(nexttext, 'findNext', elements)
                     try:
                         plist.append(nexttext.getText()).encode('utf-8')
@@ -367,14 +362,14 @@ def get_data(url):
                     else:
                         result = excerpt
               
-                  # Post text to specified reddit comment
+                    # Post text to specified reddit comment
                     result = ("Excerpt from %s\n%s" % (top_hit_url, result))
                     
                     comment.reply(result)
                     print(result)
                     print(comment.id)
 
-                    # Write our updated list back to the file
+                    # Write comment id to file
                     with open("posts_replied_to.txt", "a") as f:
                         f.write(comment.id + "\n")
                     f.close()
@@ -388,12 +383,14 @@ def get_data(url):
     current_rank += 1
     return False
 
+# Get the top ranked url
 current_rank = 0
 if(len(sorted_ranking) > 0):
     top_hit_url = get_ranked_url(current_rank)
 else:
     sys.exit("No matches found.")
 
+# Get the top ranked url, iterate for max results
 look_for_text = False
 while(look_for_text) == False:
     if(current_rank < max_results):
@@ -409,8 +406,6 @@ while(look_for_text) == False:
         print("Unable to find feasible match in top %s scrapes." % max_results)
         break
 
-
 endTime = time.time()
 duration = (endTime - startTime)
 print("\nTime elapsed: %s seconds." %round(duration,0))
-
