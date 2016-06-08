@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 __author__ = "Martin Rydén"
 __copyright__ = "Copyright 2016, Martin Rydén"
@@ -6,35 +7,93 @@ __license__ = "GNU"
 __version__ = "1.0.1"
 __email__ = "pemryd@gmail.com"
 
+### Reddit bot config ###
+import praw
 import re
+import os
+from config_bot import *
+import sys
+
+
+
+sys.stdout = open("out.txt", "w")
+
+# Check that the file that contains our username exists
+if not os.path.isfile("config_bot.py"):
+    print ("You must create a config file with your username and password.")
+    print ("Please see config_skel.py")
+    exit(1)
+
+# Create the Reddit instance
+user_agent = ("xltldr 0.1")
+r = praw.Reddit(user_agent=user_agent)
+
+# and login
+r.login(REDDIT_USERNAME, REDDIT_PASS, disable_warning=True)
+
+# Have we run this code before? If not, create an empty list
+if not os.path.isfile("posts_replied_to.txt"):
+    print("post_replied_to does not exist")
+    posts_replied_to = []
+
+# If we have run the code before, load the list of posts we have replied to
+else:
+    # Read the file into a list and remove any empty values
+    with open("posts_replied_to.txt", "r") as f:
+        posts_replied_to = f.read()
+        posts_replied_to = posts_replied_to.split("\n")
+        posts_replied_to = list(filter(None, posts_replied_to))
+
+subreddit = r.get_subreddit('pythonforengineers')
+subreddit_comments = subreddit.get_comments(limit=100)
+
+c_formula = ""
+for comment in subreddit_comments:
+    if comment.id not in posts_replied_to:
+        print("Comment not replied to: %s" % comment, comment.id)
+        if comment.body.startswith("!hejjagtestar"):
+            c_formula = comment.body.replace("!hejjagtestar", "")
+            c_formula = ''.join(list(filter(None, c_formula))).strip()
+            break
+
+if(len(c_formula) < 2):
+    sys.exit("No comments found.")
+    
+        
+
+### All set, let's begin ###
+
 import requests
 from bs4 import BeautifulSoup
 from GoogleScraper import scrape_with_config, GoogleSearchError
 import collections
 import time
+import logging
+logging.basicConfig(level=logging.DEBUG)
 
 tries = 0
+maxchars = 250
 # Input Excel formula
 while True:
-    formula = input('\nFunction: ')
-    if(formula[0] != '=') or (len(formula) > 150):
+    formula = c_formula#input('\nFunction: ')
+    if(formula[0] != '=') or (len(formula) > maxchars):
         if(tries == 0):
             print('Wrong input format. Try again.')
             tries += 1
         elif(tries == 1):
-            print('The formula must begin with "=" and cannot exceed 150 characters.')
+            print('The formula must begin with "=" and cannot exceed %s characters.' % maxchars)
             tries += 1
         else:
             break
     else:
         break
-#formula = '=INDEX(A1:Z10,MATCH("product",A1:A10,0),MATCH("month",A1:Z1,0))'
+formula = '=IF(COUNT.IF(J4:BQ4;">0")=60;"Graduted;""No graduated")'
 
 startTime = time.time()
 
 # Split by and keep any non-alphanumeric delimiter, filter blanks
 def split_formula(f):
-    split = list(filter(None, re.split('([^\\w.":!$<>%&/\s])', f)))
+    split = list(filter(None, re.split('([^\\w.":!$<>%&^/\s])', f)))
     return split
     
 dl_formula = split_formula(formula)
@@ -57,7 +116,7 @@ find_functions(dl_formula, functions)
 # variables: any non-alpha-numeric char, with exceptions
 # separators: any non-alpha-numeric char
 # tbd: take another look at these and figure out wtf is actually going on here
-variables = re.compile('([\w\.":!$<>%&/\s]+)',re.I)
+variables = re.compile('([\w\.":!$<>%&^/\s]+)',re.I)
 separators = re.compile(r'^\W+',re.I)
 
 #tbd: add operators:
@@ -96,11 +155,21 @@ wcf = ''.join(wc)+"*"
 
 print('\nSearching for substituted formula:\n%s' % wcf)
 
+# Sites / keywords to exclude
+unwanted= ['youtube',
+           'stackoverflow',
+           '"stack exchange"',
+           'site:knowexcel.com'
+           #'site:social.technet.microsoft.com'
+           ]
+unwanted = ' -'.join(unwanted)
+
 #### Scrape google for top hits ####
+# sm = ['http-async', 'http']
 
 config = {
     'use_own_ip': 'True',
-    'keyword': ('excel formula -youtube -stackoverflow -"stack exchange" -site:knowexcel.com %s') % wcf,
+    'keyword': ('excel formula -%s %s') % (unwanted, wcf),
     'search_engines': ['duckduckgo'],
     'num_pages_for_keyword': 1,
     'scrape_method': 'http-async',
@@ -118,7 +187,16 @@ except GoogleSearchError as e:
     pass
 
 # Manually set max urls generated, since the built-in function is a bit wonky
-max_results = 25
+numf = len(found_functions)
+
+
+if(numf <= 2):
+    max_results = (12 * numf)
+elif(numf > 2 and numf <= 5):
+    max_results = (10 * numf)
+else:
+    max_results = 50
+
 r = 0
 # Results - append URL for each hit to urls list
 for serp in search.serps:
@@ -134,7 +212,7 @@ for serp in search.serps:
 ranking = collections.defaultdict(dict)
 
 # Web elements to look for
-elements = ['pre', 'p', 'ul', 'td', 'h1', 'h2', 'h3', 'h4']
+elements = ['pre', 'p', 'ul', 'td', 'h1', 'h2', 'h3', 'h4', 'xl-formula']
 
 
 # Searches a web page for an element, stores matches in dict
@@ -150,7 +228,7 @@ for url in urls:
     matches = collections.defaultdict(int) # New dict for each url
     try:
         r = requests.get(url)
-        soup = BeautifulSoup(r.content, "html.parser") # Parses the page
+        soup = BeautifulSoup(r.text.encode('utf-8'), "lxml") # Parses the page
     
         # Iterate through each chosen element, which are counted
         # using the find_elements function
@@ -158,7 +236,7 @@ for url in urls:
             find_elements(e)
        
         try:
-            stitle = soup.title.string
+            stitle = soup.title.string.encode('utf-8')
         except:
             stitle = "No title"
      
@@ -172,7 +250,7 @@ for url in urls:
         ranking[web_id] = (matches)
         ranking[web_id]['url'] = (url)
     except:
-        continue
+        continue # Skips sites with SSL cert errors
 
 
 # Sums total count of elements per web hit into a score
@@ -207,24 +285,36 @@ sorted_ranking = sorted(ranking.items(),key=lambda k_v: k_v[1]['xscore'],reverse
 def get_ranked_url(rank):
     return sorted_ranking[rank][1]['url']
 
-#top_hit_url = "https://www.ablebits.com/office-addins-blog/2014/08/13/excel-index-match-function-vlookup/"
-#top_hit_url = "http://www.deskbright.com/excel/using-index-match-match/"
-
 nf = '' # new/scraped formula
+
+def getAttribute(attr, f, t):
+    try:
+        return getattr(attr, f)(t)
+    except:
+        pass
 
 # Parses data of input url and checks hits for each specified element
 # If a paragraph contains every function in the original formula, set nf to p
 def get_data(url):
     r = requests.get(url)
-    soup = BeautifulSoup(r.text, "html.parser") # Parses the page
+    soup = BeautifulSoup(r.text.encode('utf-8'), "lxml") # Parses the page
     for p in (soup.find_all()):
         if(all(functions in p.getText() for functions in found_functions)):
             nf_found_functions = []
             global nf
             nf = p.getText()
-            nf_dl_formula = split_formula(nf)
-            find_functions(nf_dl_formula, nf_found_functions)         
-            if(set(found_functions) == set(nf_found_functions)) and len(found_functions) == len(nf_found_functions) and nf[0] == "=":         
+            nf_dl_formula = split_formula(nf.replace(' ', ''))
+            find_functions(nf_dl_formula, nf_found_functions)    
+#            print(url)
+#            print(nf[0])
+#            print(len(found_functions))
+#            print(len(nf_found_functions))
+#            print(set(found_functions))
+#            print(set(nf_found_functions))  
+#            print(nf.encode('utf-8'))   
+            
+            if(set(found_functions) == set(nf_found_functions)) and len(found_functions) == len(nf_found_functions) and nf[0] == "=":
+                
                 # Dictionary to keep track of which formula element is const, var, or sep
                 nf_dl_type = collections.defaultdict(list)
 
@@ -236,60 +326,85 @@ def get_data(url):
                         nf_dl_type['sep'].append(f)
                     else:
                         nf_dl_type['var'].append(f)
+
                 
+                num_p = 5 # Set number of paragraphs before and after p to collect
+                plist = [] # List to store paragraph +- num_p paragraphs
+                
+                prevtext = p
+                nexttext = p
+                
+                # Find previous and next num_p paragraphs, add to list
+                for i in range(0,5):
+                    prevtext = getAttribute(prevtext, 'findPrevious', elements)
+                    try:                    
+                        plist.insert(0, prevtext.getText()).encode('utf-8')
+                    except:
+                        pass        
                 try:
-                    # Fetch the match +- 5 paragraphs
-                    excerpt = (p.findPrevious(elements).findPrevious(elements).findPrevious(elements).findPrevious(elements).getText())
-                    excerpt += ("\n\n")
-                    excerpt += (p.findPrevious(elements).findPrevious(elements).findPrevious(elements).getText())
-                    excerpt += ("\n\n")
-                    excerpt += (p.findPrevious(elements).findPrevious(elements).getText())
-                    excerpt += ("\n\n")                
-                    excerpt += (p.findPrevious(elements).getText())
-                    excerpt += ("\n\n")
-                    excerpt += (p.getText())
-                    excerpt += ("\n\n")
-                    excerpt += (p.findNext(elements).getText())
-                    excerpt += ("\n\n")
-                    excerpt += (p.findNext(elements).findNext(elements).getText())
-                    excerpt += ("\n\n")
-                    excerpt += (p.findNext(elements).findNext(elements).findNext(elements).getText())
-                    excerpt += ("\n\n")
-                    excerpt += (p.findNext(elements).findNext(elements).findNext(elements).findNext(elements).getText())
-                    excerpt += ("\n\n")
-                    excerpt += (p.findNext(elements).findNext(elements).findNext(elements).findNext(elements).findNext(elements).getText())
-                    excerpt += ("\n\n")
-                    excerpt += (p.findNext(elements).findNext(elements).findNext(elements).findNext(elements).findNext(elements).findNext(elements).getText())
-                
+                    plist.append(p.getText()).encode('utf-8')
+                except:
+                    pass
+                for i in range(0,5):
+                    nexttext = getAttribute(nexttext, 'findNext', elements)
+                    try:
+                        plist.append(nexttext.getText()).encode('utf-8')
+                    except:
+                        pass
+                # Join list of paragraphs, replace variables with original vars, if possible
+                try:                
+                    excerpt = '\n'.join(plist)
                     var_dict = {}  
+                    global result                    
                     
-                    for i,v in enumerate(nf_dl_type['var']):
-                        var_dict[v] = dl_type['var'][i]
+                    if(len(dl_type['var']) == len(nf_dl_type['var'])):
+                            
+                        for i,v in enumerate(nf_dl_type['var']):
+                            var_dict[v] = dl_type['var'][i]
+
+                        xpattern = re.compile('|'.join(var_dict.keys()))
+                        result = xpattern.sub(lambda x: var_dict[x.group()], excerpt)
+                    else:
+                        result = excerpt
+              
+                  # Post text to specified reddit comment
+                    result = ("Excerpt from %s\n%s" % (top_hit_url, result))
                     
-                    xpattern = re.compile('|'.join(var_dict.keys()))                
-                    result = xpattern.sub(lambda x: var_dict[x.group()], excerpt)
-                    
-                    print("Excerpt from %s\n" % top_hit_url)
+                    comment.reply(result)
                     print(result)
+                    print(comment.id)
+
+                    # Write our updated list back to the file
+                    with open("posts_replied_to.txt", "a") as f:
+                        f.write(comment.id + "\n")
+                    f.close()
      
                     return True                
                     break
-                except:
-                    pass
+                except Exception as e:
+                    print(e)
+
     global current_rank
     current_rank += 1
     return False
 
 current_rank = 0
-top_hit_url = get_ranked_url(current_rank)
+if(len(sorted_ranking) > 0):
+    top_hit_url = get_ranked_url(current_rank)
+else:
+    sys.exit("No matches found.")
 
 look_for_text = False
 while(look_for_text) == False:
-    if(current_rank < 5):
-        top_hit_url = get_ranked_url(current_rank)
-        print('\nSelected web page: %s' % top_hit_url)
-        print('\n')
-        look_for_text = get_data(top_hit_url)
+    if(current_rank < max_results):
+        try:
+            top_hit_url = get_ranked_url(current_rank)
+            print('\nSelected web page: %s' % top_hit_url)
+            print('\n')
+            look_for_text = get_data(top_hit_url)
+        except IndexError:
+            print("Unable to find feasible match in top %s scrapes." % max_results)
+            break
     else:
         print("Unable to find feasible match in top %s scrapes." % max_results)
         break
@@ -297,4 +412,5 @@ while(look_for_text) == False:
 
 endTime = time.time()
 duration = (endTime - startTime)
-print(duration)
+print("\nTime elapsed: %s seconds." %round(duration,0))
+
