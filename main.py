@@ -30,24 +30,24 @@ r = praw.Reddit(user_agent=user_agent)
 r.login(REDDIT_USERNAME, REDDIT_PASS, disable_warning=True)
 
 # Have we run this code before? If not, create an empty list
-if not os.path.isfile("posts_replied_to.txt"):
-    print("post_replied_to does not exist")
-    posts_replied_to = []
+if not os.path.isfile("comments_replied_to.txt"):
+    print("comments_replied_to does not exist")
+    comments_replied_to = []
 
 # If we have run the code before, load the list of posts we have replied to
 else:
     # Read the file into a list and remove any empty values
-    with open("posts_replied_to.txt", "r") as f:
-        posts_replied_to = f.read()
-        posts_replied_to = posts_replied_to.split("\n")
-        posts_replied_to = list(filter(None, posts_replied_to))
+    with open("comments_replied_to.txt", "r") as f:
+        comments_replied_to = f.read()
+        comments_replied_to = posts_replied_to.split("\n")
+        comments_replied_to = list(filter(None, posts_replied_to))
 
 subreddit = r.get_subreddit('pythonforengineers')
 subreddit_comments = subreddit.get_comments(limit=100)
 
 c_formula = ""
 for comment in subreddit_comments:
-    if comment.id not in posts_replied_to:
+    if comment.id not in comments_replied_to:
         print("Comment not replied to: %s" % comment, comment.id)
         if comment.body.startswith("!formulate"):
             c_formula = comment.body.replace("!formulate", "")
@@ -370,7 +370,7 @@ def get_data(url):
                     print(comment.id)
 
                     # Write comment id to file
-                    with open("posts_replied_to.txt", "a") as f:
+                    with open("comments_replied_to.txt", "a") as f:
                         f.write(comment.id + "\n")
                     f.close()
      
