@@ -14,7 +14,7 @@ import os
 from config_bot import *
 import sys
 
-sys.stdout = open("out.txt", "w")
+#sys.stdout = open("out.txt", "w")
 
 # Check that the file that contains our username exists
 if not os.path.isfile("config_bot.py"):
