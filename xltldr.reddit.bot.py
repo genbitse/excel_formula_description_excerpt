@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 __author__ = "Martin Rydén"
@@ -14,7 +13,7 @@ import os
 from config_bot import *
 import sys
 
-#sys.stdout = open("out.txt", "w")
+sys.stdout = open("out.txt", "w")
 
 # Check that the file that contains our username exists
 if not os.path.isfile("config_bot.py"):
@@ -39,8 +38,8 @@ else:
     # Read the file into a list and remove any empty values
     with open("comments_replied_to.txt", "r") as f:
         comments_replied_to = f.read()
-        comments_replied_to = posts_replied_to.split("\n")
-        comments_replied_to = list(filter(None, posts_replied_to))
+        comments_replied_to = comments_replied_to.split("\n")
+        comments_replied_to = list(filter(None, comments_replied_to))
 
 subreddit = r.get_subreddit('pythonforengineers')
 subreddit_comments = subreddit.get_comments(limit=100)
@@ -113,10 +112,6 @@ find_functions(dl_formula, functions)
 variables = re.compile('([\w\.":!$<>%&^/\s]+)',re.I)
 separators = re.compile(r'^\W+',re.I)
 
-#tbd: add operators:
-# = (equal sign), >= (greater than or equal to sign), <= (less than or equal to sign),
-# <> (not equal to sign),  (space)
-
 # Dictionary to keep track of which formula element is const, var, or sep
 dl_type = collections.defaultdict(list)
 
@@ -153,7 +148,10 @@ print('\nSearching for substituted formula:\n%s' % wcf)
 unwanted= ['youtube',
            'stackoverflow',
            '"stack exchange"',
-           'site:knowexcel.com'
+           'site:knowexcel.com',
+           'site:answers.microsoft.com/'
+           #'site:support.office.com',
+           #'site:support.microsoft.com'
            #'site:social.technet.microsoft.com'
            ]
 unwanted = ' -'.join(unwanted)
@@ -206,7 +204,7 @@ for serp in search.serps:
 ranking = collections.defaultdict(dict)
 
 # Web elements to look for
-elements = ['pre', 'p', 'ul', 'td', 'h1', 'h2', 'h3', 'h4', 'xl-formula']
+elements = ['pre', 'p', 'ul', 'tr', 'td', 'h1', 'h2', 'h3', 'h4', 'xl-formula', 'code']
 
 
 # Searches a web page for an element, stores matches in dict
@@ -287,6 +285,11 @@ def getAttribute(attr, f, t):
     except:
         pass
 
+def writeCommentIdToFile():
+        with open("comments_replied_to.txt", "a") as f:
+            f.write(comment.id + "\n")
+        f.close() 
+
 # Parses data of input url and checks hits for each specified element
 # If a paragraph contains every function in the original formula, set nf to p
 def get_data(url):
@@ -322,63 +325,89 @@ def get_data(url):
                         nf_dl_type['sep'].append(f)
                     else:
                         nf_dl_type['var'].append(f)
-                
+
                 num_p = 5 # Set number of paragraphs before and after p to collect
                 plist = [] # List to store paragraph +- num_p paragraphs
                 
                 prevtext = p
                 nexttext = p
+                        
+                istable = False
                 
-                # Find previous and next num_p paragraphs, add to list
-                for i in range(0,num_p):
-                    prevtext = getAttribute(prevtext, 'findPrevious', elements)
-                    try:                    
-                        plist.insert(0, prevtext.getText()).encode('utf-8')
-                    except:
-                        pass        
-                try:
-                    plist.append(p.getText()).encode('utf-8')
-                except:
-                    pass
-                for i in range(0,num_p):
-                    nexttext = getAttribute(nexttext, 'findNext', elements)
+                global result
+                
+                data = []
+                tables = soup.find_all("table")
+                for table in tables:
+                    if(istable == False):
+                        try:
+                            table_body = table.find('tbody')
+                            rows = table_body.find_all('tr')
+                            for row in rows:
+                                print("Paragraph: %s" % p)
+                                print("Tbody: %s" % table_body)
+                                if(p.getText() in table_body.getText()):
+                                    istable = True
+                                    print("its a table")
+                                    cols = row.find_all('td')
+                                    cols = [ele.text.strip() for ele in cols]
+                                    data.append([ele for ele in cols if ele])
+                        except:
+                            pass
+                
+                from tabulate import tabulate
+                result = (tabulate(data, headers="firstrow"))
+                
+                if(istable == False):
+                    # Find previous and next num_p paragraphs, add to list
+                    for i in range(0,num_p):
+                        prevtext = getAttribute(prevtext, 'findPrevious', elements)
+                        try:                    
+                            plist.insert(0, prevtext.getText()).encode('utf-8')
+                        except:
+                            pass        
                     try:
-                        plist.append(nexttext.getText()).encode('utf-8')
+                        plist.append(p.getText()).encode('utf-8')
                     except:
                         pass
+                    for i in range(0,num_p):
+                        nexttext = getAttribute(nexttext, 'findNext', elements)
+                        try:
+                            plist.append(nexttext.getText()).encode('utf-8')
+                        except:
+                            pass
                 # Join list of paragraphs, replace variables with original vars, if possible
-                try:                
-                    excerpt = '\n'.join(plist)
-                    var_dict = {}  
-                    global result                    
+                    try:                
+                        excerpt = '\n'.join(plist)
+                        var_dict = {}  
+    
+                        if(len(dl_type['var']) == len(nf_dl_type['var'])):
+                                
+                            for i,v in enumerate(nf_dl_type['var']):
+                                var_dict[v] = dl_type['var'][i]
+    
+                            xpattern = re.compile('|'.join(var_dict.keys()))
+                            result = xpattern.sub(lambda x: var_dict[x.group()], excerpt)
+                        else:
+                            result = excerpt
+                  
+                        result = ('Excerpt from %s\n\n\n%s' % (top_hit_url, result))
+                        print(result)
+                        #comment.reply(result[:2500]) # post comment, no longer than 2500 characters
+                        
+                        # Write comment id to file
+                        writeCommentIdToFile()
+         
+                        return True                
+                        break
+                    except:
+                        continue
                     
-                    if(len(dl_type['var']) == len(nf_dl_type['var'])):
-                            
-                        for i,v in enumerate(nf_dl_type['var']):
-                            var_dict[v] = dl_type['var'][i]
-
-                        xpattern = re.compile('|'.join(var_dict.keys()))
-                        result = xpattern.sub(lambda x: var_dict[x.group()], excerpt)
-                    else:
-                        result = excerpt
-              
-                    # Post text to specified reddit comment
-                    result = ("Excerpt from %s\n%s" % (top_hit_url, result))
-                    
-                    comment.reply(result)
+                elif(istable):
                     print(result)
-                    print(comment.id)
-
-                    # Write comment id to file
-                    with open("comments_replied_to.txt", "a") as f:
-                        f.write(comment.id + "\n")
-                    f.close()
-     
                     return True                
                     break
-                except Exception as e:
-                    print(e)
-
+                    
     global current_rank
     current_rank += 1
     return False
@@ -401,9 +430,11 @@ while(look_for_text) == False:
             look_for_text = get_data(top_hit_url)
         except IndexError:
             print("Unable to find feasible match in top %s scrapes." % max_results)
+            writeCommentIdToFile()          
             break
     else:
         print("Unable to find feasible match in top %s scrapes." % max_results)
+        writeCommentIdToFile()
         break
 
 endTime = time.time()
