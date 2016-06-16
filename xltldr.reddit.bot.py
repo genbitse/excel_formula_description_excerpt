@@ -285,10 +285,24 @@ def getAttribute(attr, f, t):
     except:
         pass
 
+def print_table(table_data, f):
+    tabletext = ""
+    for i, row in enumerate(table_data):
+        rowtext = ('|'.join(row))
+        tabletext += "\n%s" % rowtext
+        if i == 0:
+            head_chars = [":--"  for x in range(0,len(row))]
+            head_chars = '|'.join(head_chars)
+            tabletext += "\n%s" % head_chars
+    return tabletext
+            
+
 def writeCommentIdToFile():
         with open("comments_replied_to.txt", "a") as f:
             f.write(comment.id + "\n")
-        f.close() 
+        f.close()
+
+
 
 # Parses data of input url and checks hits for each specified element
 # If a paragraph contains every function in the original formula, set nf to p
@@ -325,38 +339,58 @@ def get_data(url):
                         nf_dl_type['sep'].append(f)
                     else:
                         nf_dl_type['var'].append(f)
+                
+                nf_dl_type['var'] = [x.replace('"', "") for x in nf_dl_type['var']]                
+                
+                print(dl_type)
+                print(nf_dl_type)
 
                 num_p = 5 # Set number of paragraphs before and after p to collect
                 plist = [] # List to store paragraph +- num_p paragraphs
                 
                 prevtext = p
                 nexttext = p
-                        
-                istable = False
-                
+
                 global result
                 
+                prevdata = []
                 data = []
+                
+                istable = False
+                currentTable = 0
+                
                 tables = soup.find_all("table")
-                for table in tables:
+                for i, table in enumerate(tables):
                     if(istable == False):
                         try:
                             table_body = table.find('tbody')
                             rows = table_body.find_all('tr')
                             for row in rows:
-                                print("Paragraph: %s" % p)
-                                print("Tbody: %s" % table_body)
                                 if(p.getText() in table_body.getText()):
                                     istable = True
-                                    print("its a table")
+                                    currentTable = i
                                     cols = row.find_all('td')
                                     cols = [ele.text.strip() for ele in cols]
-                                    data.append([ele for ele in cols if ele])
+                                    if not all(field is '' for field in cols):
+                                        data.append([ele for ele in cols if ele])
                         except:
                             pass
                 
-                from tabulate import tabulate
-                result = (tabulate(data, headers="firstrow"))
+                if(istable):
+                    if(currentTable > 0):
+                        table = tables[currentTable-1]
+                        try:
+                            table_body = table.find('tbody')
+                            rows = table_body.find_all('tr')
+                            for row in rows:
+                                cols = row.find_all('td')
+                                cols = [ele.text.strip() for ele in cols]
+                                if not all(field is '' for field in cols):
+                                    prevdata.append([ele for ele in cols if ele])
+                        except:
+                            pass
+                
+                print('^Modified ^excerpt ^from ^%s\n\n' % top_hit_url)
                 
                 if(istable == False):
                     # Find previous and next num_p paragraphs, add to list
@@ -376,27 +410,27 @@ def get_data(url):
                             plist.append(nexttext.getText()).encode('utf-8')
                         except:
                             pass
+
                 # Join list of paragraphs, replace variables with original vars, if possible
-                    try:                
+                    try:         
                         excerpt = '\n'.join(plist)
-                        var_dict = {}  
     
                         if(len(dl_type['var']) == len(nf_dl_type['var'])):
-                                
-                            for i,v in enumerate(nf_dl_type['var']):
-                                var_dict[v] = dl_type['var'][i]
-    
-                            xpattern = re.compile('|'.join(var_dict.keys()))
-                            result = xpattern.sub(lambda x: var_dict[x.group()], excerpt)
+                                                       
+                            var_dict = dict(zip(nf_dl_type['var'], dl_type['var']))
+                            
+                            pattern = re.compile(r"(?<!\w)(?:" + '|'.join([re.escape(x) for x in var_dict.keys()]) + r")(?!\w?/)")
+                            result = pattern.sub(lambda x: "**" + var_dict[x.group()] + "**",excerpt)
+
                         else:
                             result = excerpt
                   
-                        result = ('Excerpt from %s\n\n\n%s' % (top_hit_url, result))
+                        result = result.replace(p.getText(), "**" + p.getText() + "**")
                         print(result)
-                        #comment.reply(result[:2500]) # post comment, no longer than 2500 characters
+                        #comment.reply(result[:3000]) # post comment, no longer than 3000 characters
                         
                         # Write comment id to file
-                        writeCommentIdToFile()
+                        #writeCommentIdToFile()
          
                         return True                
                         break
@@ -404,7 +438,27 @@ def get_data(url):
                         continue
                     
                 elif(istable):
+                    table1 = print_table(prevdata, p.getText())
+                    table2 = print_table(data, p.getText())
+                    tabletexts = [table1, table2]
+                    excerpt = '\n\n'.join(tabletexts)
+    
+                    if(len(dl_type['var']) == len(nf_dl_type['var'])):
+                        
+                        var_dict = dict(zip(nf_dl_type['var'], dl_type['var']))
+                        
+                        pattern = re.compile(r"(?<!\w)(?:" + '|'.join([re.escape(x) for x in var_dict.keys()]) + r")(?!\w?/)")
+                        result = pattern.sub(lambda x: "**" + var_dict[x.group()] + "**",excerpt)
+
+                    else:
+                        result = excerpt
+                        
                     print(result)
+                    #comment.reply(result[:3000]) # post comment, no longer than 3000 characters
+                    
+                    # Write comment id to file
+                    #writeCommentIdToFile()
+                    
                     return True                
                     break
                     
