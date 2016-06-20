@@ -50,6 +50,7 @@ for comment in subreddit_comments:
         print("Comment not replied to: %s" % comment, comment.id)
         if comment.body.startswith("!formulate"):
             c_formula = comment.body.replace("!formulate", "")
+            c_formula = c_formula.replace(" ", "")
             c_formula = ''.join(list(filter(None, c_formula))).strip()
             break
 
@@ -67,16 +68,16 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 
 tries = 0
-maxchars = 250
+max_chars = 250
 # Input Excel formula
 while True:
     formula = c_formula#input('\nFunction: ')
-    if(formula[0] != '=') or (len(formula) > maxchars):
+    if(formula[0] != '=') or (len(formula) > max_chars):
         if(tries == 0):
             print('Wrong input format. Try again.')
             tries += 1
         elif(tries == 1):
-            print('The formula must begin with "=" and cannot exceed %s characters.' % maxchars)
+            print('The formula must begin with "=" and cannot exceed %s characters.' % max_chars)
             tries += 1
         else:
             break
@@ -162,8 +163,8 @@ unwanted = ' -'.join(unwanted)
 config = {
     'use_own_ip': 'True',
     'keyword': ('excel formula -%s %s') % (unwanted, wcf),
-    'search_engines': ['duckduckgo'],
-    'num_pages_for_keyword': 1,
+    'search_engines': ['duckduckgo', 'bing', 'google'],
+    'num_pages_for_keyword': 3,
     'scrape_method': 'http-async',
     'do_caching': 'True',
     'print_results': 'summarize'
@@ -181,13 +182,12 @@ except GoogleSearchError as e:
 # Manually set max urls generated, since the built-in function is a bit wonky
 numf = len(found_functions)
 
-
 if(numf <= 2):
     max_results = (12 * numf)
 elif(numf > 2 and numf <= 5):
-    max_results = (10 * numf)
+    max_results = (30 * numf)
 else:
-    max_results = 50
+    max_results = 200
 
 r = 0
 # Results - append URL for each hit to urls list
@@ -204,7 +204,7 @@ for serp in search.serps:
 ranking = collections.defaultdict(dict)
 
 # Web elements to look for
-elements = ['pre', 'p', 'ul', 'tr', 'td', 'h1', 'h2', 'h3', 'h4', 'xl-formula', 'code']
+elements = ['pre', 'p', 'ul', 'tr', 'td', 'h1', 'h2', 'h3', 'h4', 'xl-formula', 'dl']
 
 
 # Searches a web page for an element, stores matches in dict
@@ -278,13 +278,14 @@ def get_ranked_url(rank):
 
 nf = '' # new/scraped formula
 
-# This function 
+# Get text before/after matched function paragraph
 def getAttribute(attr, f, t):
     try:
         return getattr(attr, f)(t)
     except:
         pass
 
+# Formats tables to look nice on reddit
 def print_table(table_data, f):
     tabletext = ""
     for i, row in enumerate(table_data):
@@ -296,13 +297,10 @@ def print_table(table_data, f):
             tabletext += "\n%s" % head_chars
     return tabletext
             
-
 def writeCommentIdToFile():
         with open("comments_replied_to.txt", "a") as f:
             f.write(comment.id + "\n")
         f.close()
-
-
 
 # Parses data of input url and checks hits for each specified element
 # If a paragraph contains every function in the original formula, set nf to p
@@ -316,17 +314,10 @@ def get_data(url):
             nf = p.getText()
             nf_dl_formula = split_formula(nf.replace(' ', '')) # Split the formula and get rid of whitespaces
             find_functions(nf_dl_formula, nf_found_functions) # Add function names to list
-#            print(url)
-#            print(nf[0])
-#            print(len(found_functions))
-#            print(len(nf_found_functions))
-#            print(set(found_functions))
-#            print(set(nf_found_functions))  
-#            print(nf.encode('utf-8'))   
             
             # The next requirements are that the new function list and the original function list need to contain the same
-            # names, and be the same length. The text need to begin with an equal sign
-            if(set(found_functions) == set(nf_found_functions)) and len(found_functions) == len(nf_found_functions) and nf[0] == "=":
+            # names, and be the same length. The text needs to begin with "="
+            if(set(found_functions) == set(nf_found_functions)) and len(found_functions) == len(nf_found_functions):# and nf[0] == "=":
                 
                 # Dictionary to keep track of which formula element is const, var, or sep
                 nf_dl_type = collections.defaultdict(list)
@@ -340,12 +331,15 @@ def get_data(url):
                     else:
                         nf_dl_type['var'].append(f)
                 
+                # Remove " from formula
+                # Remove newlines
                 nf_dl_type['var'] = [x.replace('"', "") for x in nf_dl_type['var']]                
+                if("\n" in nf_dl_type['var']): nf_dl_type['var'].remove("\n")       
                 
-                print(dl_type)
-                print(nf_dl_type)
+                for x in nf_dl_type['var']:
+                    print(x.encode('utf-8'))
 
-                num_p = 5 # Set number of paragraphs before and after p to collect
+                num_p = 10 # Set number of paragraphs before and after p to collect
                 plist = [] # List to store paragraph +- num_p paragraphs
                 
                 prevtext = p
@@ -353,33 +347,33 @@ def get_data(url):
 
                 global result
                 
-                prevdata = []
-                data = []
+                prevdata = [] # for tables
+                data = [] # for tables
                 
                 istable = False
-                currentTable = 0
+                currentTable = 0 # We need to keep track of the current table, to include the previous if relevant
                 
-                tables = soup.find_all("table")
+                tables = soup.find_all("table") # Find all tables
                 for i, table in enumerate(tables):
-                    if(istable == False):
+                    if(istable == False): # Check that we haven't already found a table with matching formula
                         try:
                             table_body = table.find('tbody')
                             rows = table_body.find_all('tr')
                             for row in rows:
-                                if(p.getText() in table_body.getText()):
+                                if(p.getText() in table_body.getText()): # Is the formula paragraph in this table?
                                     istable = True
                                     currentTable = i
                                     cols = row.find_all('td')
                                     cols = [ele.text.strip() for ele in cols]
-                                    if not all(field is '' for field in cols):
-                                        data.append([ele for ele in cols if ele])
+                                    if not all(field is '' for field in cols): # Check that the row is not empty
+                                        data.append([ele for ele in cols if ele]) # Append fields to dataset
                         except:
                             pass
                 
-                if(istable):
+                if(istable): # If we have found a matching table
                     if(currentTable > 0):
-                        table = tables[currentTable-1]
                         try:
+                            table = tables[currentTable-1] # Get the previous table
                             table_body = table.find('tbody')
                             rows = table_body.find_all('tr')
                             for row in rows:
@@ -390,42 +384,56 @@ def get_data(url):
                         except:
                             pass
                 
-                print('^Modified ^excerpt ^from ^%s\n\n' % top_hit_url)
+                excerpt = ('^Modified ^excerpt ^from ^%s\n\n' % top_hit_url) # The ^ char makes text smaller on reddit comment
                 
+                skipped_p = 0
+                ### If no matching tables were found, this is the plain text approach ###
                 if(istable == False):
                     # Find previous and next num_p paragraphs, add to list
                     for i in range(0,num_p):
-                        prevtext = getAttribute(prevtext, 'findPrevious', elements)
-                        try:                    
-                            plist.insert(0, prevtext.getText()).encode('utf-8')
-                        except:
-                            pass        
+                        if(skipped_p <= 5 and len(''.join(plist)) < 1000):
+                            prevtext = getAttribute(prevtext, 'findPrevious', elements)
+                            try:                    
+                                plist.insert(0, prevtext.getText()).encode('utf-8')
+                            except:
+                                pass 
+                            if(len(prevtext.getText()) < 5): skipped_p += 1
+                        
                     try:
                         plist.append(p.getText()).encode('utf-8')
                     except:
                         pass
+                    skipped_p = 0
                     for i in range(0,num_p):
-                        nexttext = getAttribute(nexttext, 'findNext', elements)
-                        try:
-                            plist.append(nexttext.getText()).encode('utf-8')
-                        except:
-                            pass
+                        if(skipped_p <= 5 and len(''.join(plist)) < 3000):
+                            nexttext = getAttribute(nexttext, 'findNext', elements)
+                            try:
+                                plist.append(nexttext.getText()).encode('utf-8')
+                            except:
+                                pass
+                            try:                            
+                                if(len(nexttext.getText()) < 5): skipped_p += 1
+                            except:
+                                pass
 
-                # Join list of paragraphs, replace variables with original vars, if possible
+                # Join list of paragraphs, replace variables with original vars, if both formulas contain the same number of vars
                     try:         
-                        excerpt = '\n'.join(plist)
+                        excerpt += '\n'.join(plist)
+                        excerpt = excerpt.replace("\n\n\n", "\n") # Get rid of superfluous newlines
     
-                        if(len(dl_type['var']) == len(nf_dl_type['var'])):
+                        if(len(dl_type['var']) == len(nf_dl_type['var'])): # Do the formulas have the same number of vars?
                                                        
-                            var_dict = dict(zip(nf_dl_type['var'], dl_type['var']))
+                            var_dict = dict(zip(nf_dl_type['var'], dl_type['var'])) # Combine vars into one dict
                             
+                            # Target only full matching words that are adjacent to ,.() and/or spaces
                             pattern = re.compile(r"(?<!\w)(?:" + '|'.join([re.escape(x) for x in var_dict.keys()]) + r")(?!\w?/)")
-                            result = pattern.sub(lambda x: "**" + var_dict[x.group()] + "**",excerpt)
+                            result = pattern.sub(lambda x: "**" + var_dict[x.group()] + "**",excerpt) # Replace variables, make vars bold for reddit
 
                         else:
                             result = excerpt
-                  
-                        result = result.replace(p.getText(), "**" + p.getText() + "**")
+                            text_without_break = p.getText().replace("\n", "")
+                            result = result.replace(text_without_break, "**" + text_without_break + "**")
+                        
                         print(result)
                         #comment.reply(result[:3000]) # post comment, no longer than 3000 characters
                         
@@ -436,12 +444,13 @@ def get_data(url):
                         break
                     except:
                         continue
-                    
+                
+                ### Format, join and replace if matching tables are found ###
                 elif(istable):
                     table1 = print_table(prevdata, p.getText())
                     table2 = print_table(data, p.getText())
                     tabletexts = [table1, table2]
-                    excerpt = '\n\n'.join(tabletexts)
+                    excerpt += '\n\n'.join(tabletexts)
     
                     if(len(dl_type['var']) == len(nf_dl_type['var'])):
                         
@@ -484,7 +493,7 @@ while(look_for_text) == False:
             look_for_text = get_data(top_hit_url)
         except IndexError:
             print("Unable to find feasible match in top %s scrapes." % max_results)
-            writeCommentIdToFile()          
+            #writeCommentIdToFile()          
             break
     else:
         print("Unable to find feasible match in top %s scrapes." % max_results)
